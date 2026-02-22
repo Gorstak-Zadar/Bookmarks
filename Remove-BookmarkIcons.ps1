@@ -1,54 +1,45 @@
-<#
-.SYNOPSIS
-    Removes ICON attributes from a Netscape bookmarks.html file.
+﻿# Remove-BookmarkIcons-AutoFolder.ps1
+# Looks for bookmarks.html in THE SAME FOLDER AS THIS SCRIPT
+# Creates bookmarks-noicons.html in the same folder
 
-.DESCRIPTION
-    Keeps file structure and all entries intact, only stripping icon data.
+$scriptFolder = $PSScriptRoot
+$inputFile    = Join-Path $scriptFolder "bookmarks.html"
+$outputFile   = Join-Path $scriptFolder "bookmarks-noicons.html"
 
-.PARAMETER Path
-    Path to the bookmarks file.
-
-.PARAMETER Backup
-    Create a .bak backup before modifying.
-
-.PARAMETER OutputPath
-    Write to a different file instead of overwriting.
-
-.EXAMPLE
-    .\Remove-BookmarkIcons.ps1
-    .\Remove-BookmarkIcons.ps1 -Path bookmarks.html -Backup
-    .\Remove-BookmarkIcons.ps1 -Path bookmarks.html -OutputPath bookmarks_no_icons.html
-#>
-
-param(
-    [Parameter(Position = 0)]
-    [string]$Path = "bookmarks.html",
-
-    [switch]$Backup,
-
-    [string]$OutputPath
-)
-
-$ErrorActionPreference = "Stop"
-
-if (-not (Test-Path $Path)) {
-    Write-Error "File not found: $Path"
-    exit 1
+if (-not (Test-Path $inputFile)) {
+    Write-Host "Error: bookmarks.html not found in the script's folder:" -ForegroundColor Red
+    Write-Host "       $scriptFolder" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Make sure this .ps1 file and bookmarks.html are in the same folder." -ForegroundColor Yellow
+    pause
+    exit
 }
 
-$content = Get-Content $Path -Raw -Encoding UTF8
-$iconCount = ([regex]::Matches($content, ' ICON="[^"]*"')).Count
-$newContent = $content -replace ' ICON="[^"]*"', ''
+Write-Host "Script folder : $scriptFolder"
+Write-Host "Reading       : bookmarks.html"
+Write-Host ""
 
-$outPath = if ($OutputPath) { $OutputPath } else { $Path }
+$content = Get-Content $inputFile -Raw -Encoding UTF8
 
-if ($Backup -and -not $OutputPath) {
-    $backupPath = $Path + ".bak"
-    $content | Set-Content $backupPath -Encoding UTF8 -NoNewline
-    Write-Host "Backup saved to $backupPath"
+# Case-insensitive match for ICON= attributes (covers ICON=, icon=, Icon=, etc.)
+$iconCount = ([regex]::Matches($content, '(?i)\sICON\s*=\s*"[^"]*"')).Count
+
+if ($iconCount -eq 0) {
+    Write-Host "No ICON attributes found in the file." -ForegroundColor Yellow
+    Write-Host "Copying original file unchanged → $outputFile" -ForegroundColor Yellow
+    Copy-Item $inputFile $outputFile -Force
+} else {
+    $cleanContent = $content -replace '(?i)\s*ICON\s*=\s*"[^"]*"', ''
+    
+    # Write UTF-8 without BOM (standard for bookmarks.html)
+    [System.IO.File]::WriteAllText($outputFile, $cleanContent, [System.Text.UTF8Encoding]::new($false))
+    
+    Write-Host "Removed $iconCount icon attribute(s)." -ForegroundColor Green
+    Write-Host "Saved cleaned version → $outputFile" -ForegroundColor Green
+    Write-Host "Original file is untouched." -ForegroundColor Green
 }
 
-$fullPath = [System.IO.Path]::GetFullPath($outPath)
-[System.IO.File]::WriteAllText($fullPath, $newContent, [System.Text.UTF8Encoding]::new($false))
-
-Write-Host "Removed $iconCount icon(s) from $outPath"
+Write-Host ""
+Write-Host "Done."
+Write-Host "You can now use $outputFile for import."
+pause   # Keeps window open if double-clicked
